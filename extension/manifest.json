@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "TokenRing Collector",
+  "version": "0.1.2",
+  "description": "Collects visible subscription usage values from Claude, ChatGPT Codex, and Z.ai pages for the local TokenRing desktop app.",
+  "permissions": ["alarms", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:18765/*",
+    "http://localhost:18765/*",
+    "https://claude.ai/settings/usage*",
+    "https://chatgpt.com/codex/*",
+    "https://z.ai/manage-apikey/subscription*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/settings/usage*",
+        "https://chatgpt.com/codex/*",
+        "https://z.ai/manage-apikey/subscription*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TokenRing Collector"
+  }
+}

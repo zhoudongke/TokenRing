@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TokenRing</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="titlebar">
+        <div class="title">
+          <span class="mark"></span>
+          <div>
+            <h1>TokenRing</h1>
+            <p id="lastUpdated">Waiting for usage pages</p>
+          </div>
+        </div>
+        <div class="window-actions">
+          <button class="icon-btn" id="minimizeBtn" title="Minimize" aria-label="Minimize">
+            <span></span>
+          </button>
+          <button class="icon-btn" id="hideBtn" title="Hide" aria-label="Hide">
+            <span></span>
+          </button>
+        </div>
+      </header>
+
+      <section class="provider-list" id="providerList"></section>
+
+      <footer class="footer">
+        <div>
+          <strong>Local collector</strong>
+          <span>127.0.0.1:18765</span>
+        </div>
+        <button id="openAllBtn">Open usage pages</button>
+      </footer>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

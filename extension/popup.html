@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        width: 260px;
+        margin: 0;
+        padding: 14px;
+        background: #11141a;
+        color: #f6f7f9;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 13px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      p {
+        margin: 0 0 10px;
+        color: #a5aab5;
+        line-height: 18px;
+      }
+      button {
+        width: 100%;
+        border: 1px solid #2b3038;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #181b21;
+        color: #f6f7f9;
+        cursor: pointer;
+      }
+      code {
+        color: #32d583;
+      }
+      #results {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+      .result {
+        border: 1px solid #2b3038;
+        border-radius: 8px;
+        padding: 8px;
+        color: #a5aab5;
+        word-break: break-word;
+      }
+      .result strong {
+        display: block;
+        color: #f6f7f9;
+        margin-bottom: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TokenRing Collector</h1>
+    <p>Open Claude Usage, ChatGPT Codex Usage, or Z.ai Subscription while the desktop app is running.</p>
+    <p>Usage values are posted only to <code>127.0.0.1:18765</code>.</p>
+    <button id="refresh">Refresh open tabs now</button>
+    <p id="status"></p>
+    <div id="results"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

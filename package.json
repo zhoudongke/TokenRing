@@ -1,0 +1,39 @@
+{
+  "name": "token-ring",
+  "version": "0.1.0",
+  "description": "Local subscription quota viewer for Claude, ChatGPT Codex, and Z.ai.",
+  "main": "src/main.js",
+  "private": true,
+  "author": "TokenRing",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node node_modules/electron/cli.js .",
+    "check": "node scripts/check-project.js",
+    "dist:win": "node node_modules/electron-builder/cli.js --win dir --x64 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-app.ps1",
+    "dist:extension": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
+    "dist": "npm run check && npm run dist:extension && npm run dist:win"
+  },
+  "build": {
+    "appId": "local.tokenring.app",
+    "productName": "TokenRing",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release/app"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "dir"
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^39.2.4",
+    "electron-builder": "^26.8.1"
+  }
+}
