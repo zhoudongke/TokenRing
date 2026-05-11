@@ -55,6 +55,7 @@ The extension also refreshes any already-open usage tabs about once per minute. 
 ## Embedded Collection
 
 The embedded collectors refresh about once per minute while TokenRing is running. Use the tray menu item **Refresh Embedded Collectors** to force an immediate refresh.
+The **Login Status** panel shows whether each embedded collector is collecting normally, needs login, or needs attention. Use the row-level `Open` button to reopen a provider's embedded login page.
 
 First-time setup:
 
@@ -141,6 +142,7 @@ npm start
 ### 内置采集器
 
 内置采集器会在 TokenRing 运行时大约每 1 分钟刷新一次。你也可以在托盘菜单中点击 `Refresh Embedded Collectors` 立即刷新。
+主界面的 `Login Status` 区域会显示每个平台的登录/采集状态，包括是否正在正常采集、是否需要重新登录、最近访问的页面。点击每一行的 `Open` 可以重新打开对应平台的内置登录窗口。
 
 首次使用建议：
 

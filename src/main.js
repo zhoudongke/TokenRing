@@ -255,6 +255,11 @@ ipcMain.handle("open-provider", async (_event, provider) => {
 
 ipcMain.handle("get-state", async () => state);
 
+ipcMain.handle("refresh-collectors", async () => {
+  await collectAllEmbeddedProviders();
+  return state;
+});
+
 ipcMain.handle("window-action", async (_event, action) => {
   if (!mainWindow) return;
   if (action === "hide") mainWindow.hide();
@@ -361,7 +366,11 @@ function openCollectorWindow(provider) {
 }
 
 async function collectAllEmbeddedProviders() {
-  await Promise.allSettled(Object.keys(PROVIDER_URLS).map((provider) => collectEmbeddedProvider(provider)));
+  const results = await Promise.allSettled(Object.keys(PROVIDER_URLS).map((provider) => collectEmbeddedProvider(provider)));
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("usage-updated", state);
+  }
+  return results;
 }
 
 async function collectEmbeddedProvider(provider) {

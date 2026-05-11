@@ -85,6 +85,13 @@ h1 {
   font-weight: 700;
 }
 
+h2 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
 .title p {
   margin-top: 2px;
   color: var(--muted);
@@ -127,6 +134,120 @@ h1 {
   height: 10px;
   border: 2px solid var(--muted);
   border-radius: 50%;
+}
+
+.login-panel {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #11141a;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.panel-head p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+  margin-top: 1px;
+}
+
+.panel-head button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: #15181e;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.panel-head button:hover {
+  background: var(--panel-strong);
+}
+
+.login-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #15181e;
+}
+
+.login-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.login-dot.good,
+.login-title .good {
+  color: var(--green);
+}
+
+.login-dot.good {
+  background: var(--green);
+}
+
+.login-dot.warn,
+.login-title .warn {
+  color: var(--yellow);
+}
+
+.login-dot.warn {
+  background: var(--yellow);
+}
+
+.login-dot.bad,
+.login-title .bad {
+  color: var(--red);
+}
+
+.login-dot.bad {
+  background: var(--red);
+}
+
+.login-info {
+  min-width: 0;
+}
+
+.login-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.login-title span {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.login-detail,
+.login-page {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .provider-list {
@@ -192,6 +313,11 @@ h1 {
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
+}
+
+.open-btn.small {
+  padding: 6px 8px;
+  font-size: 11px;
 }
 
 .open-btn:hover,

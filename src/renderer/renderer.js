@@ -5,6 +5,7 @@ const PROVIDERS = [
 ];
 
 const providerList = document.getElementById("providerList");
+const loginStatusList = document.getElementById("loginStatusList");
 const lastUpdated = document.getElementById("lastUpdated");
 
 function colorForRemaining(remainingPct) {
@@ -81,6 +82,92 @@ function renderProvider(provider, record) {
   `;
 }
 
+function loginStateFor(provider, record) {
+  if (!record) {
+    return {
+      tone: "idle",
+      text: "Not checked",
+      detail: "Open embedded page",
+      page: provider.url
+    };
+  }
+
+  const source = record.sourceUrl || provider.url;
+  const metrics = visibleMetrics(record);
+  const lowerSource = source.toLowerCase();
+  const isAuthPage = /login|signin|auth|oauth|authorize|account/.test(lowerSource);
+
+  if (record.status === "collector_error") {
+    return {
+      tone: "bad",
+      text: "Collector error",
+      detail: record.message || "Open page to inspect",
+      page: source
+    };
+  }
+
+  if (isAuthPage) {
+    return {
+      tone: "warn",
+      text: "Login needed",
+      detail: "Embedded page is on an auth flow",
+      page: source
+    };
+  }
+
+  if ((record.status === "ok" || !record.status) && metrics.length) {
+    return {
+      tone: "good",
+      text: "Collecting",
+      detail: `${metrics.length}/2 core metrics`,
+      page: source
+    };
+  }
+
+  if (record.status === "no_metrics") {
+    return {
+      tone: "warn",
+      text: "Needs attention",
+      detail: "Page loaded, no core metric matched",
+      page: source
+    };
+  }
+
+  return {
+    tone: "idle",
+    text: "Checking",
+    detail: record.message || "Waiting for collector",
+    page: source
+  };
+}
+
+function compactUrl(value) {
+  try {
+    const url = new URL(value);
+    return `${url.host}${url.pathname}${url.hash}`;
+  } catch {
+    return value || "Unknown page";
+  }
+}
+
+function renderLoginRow(provider, record) {
+  const state = loginStateFor(provider, record);
+  return `
+    <div class="login-row">
+      <span class="login-dot ${state.tone}"></span>
+      <div class="login-info">
+        <div class="login-title">
+          <strong>${escapeHtml(provider.name)}</strong>
+          <span class="${state.tone}">${escapeHtml(state.text)}</span>
+        </div>
+        <div class="login-detail">${escapeHtml(state.detail)}</div>
+        <div class="login-page">${escapeHtml(compactUrl(state.page))}</div>
+      </div>
+      <button class="open-btn small" data-provider="${provider.id}">Open</button>
+    </div>
+  `;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -92,6 +179,7 @@ function escapeHtml(value) {
 
 function render(state) {
   const records = state?.providers || {};
+  loginStatusList.innerHTML = PROVIDERS.map((provider) => renderLoginRow(provider, records[provider.id])).join("");
   providerList.innerHTML = PROVIDERS.map((provider) => renderProvider(provider, records[provider.id])).join("");
   lastUpdated.textContent = state?.updatedAt ? `Last update ${formatTime(state.updatedAt)}` : "Open usage pages to collect data";
 }
@@ -105,16 +193,24 @@ async function refresh() {
   }
 }
 
-providerList.addEventListener("click", (event) => {
+function handleProviderClick(event) {
   const button = event.target.closest("[data-provider]");
   if (!button) return;
   window.tokenRing.openProvider(button.dataset.provider);
-});
+}
+
+providerList.addEventListener("click", handleProviderClick);
+loginStatusList.addEventListener("click", handleProviderClick);
 
 document.getElementById("openAllBtn").addEventListener("click", () => {
   for (const provider of PROVIDERS) {
     window.tokenRing.openProvider(provider.id);
   }
+});
+
+document.getElementById("refreshCollectorsBtn").addEventListener("click", async () => {
+  const state = await window.tokenRing.refreshCollectors();
+  render(state);
 });
 
 document.getElementById("minimizeBtn").addEventListener("click", () => {
