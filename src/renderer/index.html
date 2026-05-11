@@ -26,17 +26,6 @@
         </div>
       </header>
 
-      <section class="login-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Login Status</h2>
-            <p>Embedded collectors</p>
-          </div>
-          <button id="refreshCollectorsBtn">Refresh</button>
-        </div>
-        <div class="login-list" id="loginStatusList"></div>
-      </section>
-
       <section class="provider-list" id="providerList"></section>
 
       <footer class="footer">
@@ -44,7 +33,10 @@
           <strong>Local collector</strong>
           <span>127.0.0.1:18765</span>
         </div>
-        <button id="openAllBtn">Open embedded pages</button>
+        <div class="footer-actions">
+          <button id="refreshCollectorsBtn">Refresh</button>
+          <button id="openAllBtn">Open embedded pages</button>
+        </div>
       </footer>
     </main>
 

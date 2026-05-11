@@ -5,7 +5,6 @@ const PROVIDERS = [
 ];
 
 const providerList = document.getElementById("providerList");
-const loginStatusList = document.getElementById("loginStatusList");
 const lastUpdated = document.getElementById("lastUpdated");
 
 function colorForRemaining(remainingPct) {
@@ -56,6 +55,7 @@ function renderMetric(metric) {
 
 function renderProvider(provider, record) {
   const metrics = visibleMetrics(record);
+  const status = loginStateFor(provider, record);
   const bestRemaining = metrics.length ? Math.min(...metrics.map(getRemaining)) : null;
   const dotColor = bestRemaining === null ? "var(--muted)" : colorForRemaining(bestRemaining);
   const emptyMessage = record
@@ -70,9 +70,17 @@ function renderProvider(provider, record) {
       <div class="provider-head">
         <div class="provider-name">
           <span class="provider-dot" style="background:${dotColor}"></span>
-          <div>
-            <h2>${escapeHtml(provider.name)}</h2>
-            <div class="provider-time">${escapeHtml(formatTime(record?.collectedAt))}</div>
+          <div class="provider-copy">
+            <div class="provider-title-row">
+              <h2>${escapeHtml(provider.name)}</h2>
+              <span class="provider-status ${status.tone}" title="${escapeHtml(`${status.detail} · ${compactUrl(status.page)}`)}">
+                ${escapeHtml(status.text)}
+              </span>
+            </div>
+            <div class="provider-meta">
+              <span>${escapeHtml(formatTime(record?.collectedAt))}</span>
+              <span>${escapeHtml(status.detail)}</span>
+            </div>
           </div>
         </div>
         <button class="open-btn" data-provider="${provider.id}">Open</button>
@@ -150,24 +158,6 @@ function compactUrl(value) {
   }
 }
 
-function renderLoginRow(provider, record) {
-  const state = loginStateFor(provider, record);
-  return `
-    <div class="login-row">
-      <span class="login-dot ${state.tone}"></span>
-      <div class="login-info">
-        <div class="login-title">
-          <strong>${escapeHtml(provider.name)}</strong>
-          <span class="${state.tone}">${escapeHtml(state.text)}</span>
-        </div>
-        <div class="login-detail">${escapeHtml(state.detail)}</div>
-        <div class="login-page">${escapeHtml(compactUrl(state.page))}</div>
-      </div>
-      <button class="open-btn small" data-provider="${provider.id}">Open</button>
-    </div>
-  `;
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -179,7 +169,6 @@ function escapeHtml(value) {
 
 function render(state) {
   const records = state?.providers || {};
-  loginStatusList.innerHTML = PROVIDERS.map((provider) => renderLoginRow(provider, records[provider.id])).join("");
   providerList.innerHTML = PROVIDERS.map((provider) => renderProvider(provider, records[provider.id])).join("");
   lastUpdated.textContent = state?.updatedAt ? `Last update ${formatTime(state.updatedAt)}` : "Open usage pages to collect data";
 }
@@ -200,7 +189,6 @@ function handleProviderClick(event) {
 }
 
 providerList.addEventListener("click", handleProviderClick);
-loginStatusList.addEventListener("click", handleProviderClick);
 
 document.getElementById("openAllBtn").addEventListener("click", () => {
   for (const provider of PROVIDERS) {
