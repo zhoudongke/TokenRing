@@ -32,7 +32,6 @@ const collectorWindows = new Map();
 const collectorTimers = new Map();
 const collectorRefreshes = new Map();
 const programmaticRefreshes = new Map();
-const userVisibleCollectors = new Set();
 let state = {
   updatedAt: null,
   providers: {}
@@ -416,6 +415,7 @@ function ensureCollectorWindow(provider) {
     width: 1120,
     height: 820,
     show: false,
+    paintWhenInitiallyHidden: true,
     skipTaskbar: true,
     title: `TokenRing Collector - ${provider}`,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
@@ -433,7 +433,6 @@ function ensureCollectorWindow(provider) {
   win.on("close", (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
-      userVisibleCollectors.delete(provider);
       win.hide();
     }
   });
@@ -455,7 +454,6 @@ function openCollectorWindow(provider) {
   if (win.isMinimized()) {
     win.restore();
   }
-  userVisibleCollectors.add(provider);
   win.center();
   win.show();
   win.focus();
@@ -484,37 +482,12 @@ function refreshAndCollectEmbeddedProvider(provider) {
 }
 
 async function runRefreshAndCollectEmbeddedProvider(provider) {
-  const restoreVisibility = await makeCollectorWindowRenderable(provider);
   try {
     await refreshCollectorWindow(provider, { forceReload: true });
     return await collectEmbeddedProviderWhenReady(provider);
   } finally {
-    restoreVisibility();
     programmaticRefreshes.delete(provider);
   }
-}
-
-async function makeCollectorWindowRenderable(provider) {
-  const win = ensureCollectorWindow(provider);
-  if (userVisibleCollectors.has(provider) || win.isDestroyed()) {
-    return () => {};
-  }
-
-  const previousBounds = win.getBounds();
-  win.setBounds({
-    x: -32000,
-    y: -32000,
-    width: previousBounds.width,
-    height: previousBounds.height
-  });
-  win.showInactive();
-  await wait(250);
-
-  return () => {
-    if (win.isDestroyed() || userVisibleCollectors.has(provider)) return;
-    win.hide();
-    win.setBounds(previousBounds);
-  };
 }
 
 async function refreshCollectorWindow(provider, options = {}) {
