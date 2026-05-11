@@ -6,6 +6,10 @@ const { buildExtractionScript } = require("./collector-extractors");
 
 const PORT = 18765;
 const COLLECTOR_INTERVAL_MS = 60 * 1000;
+const COLLECTOR_NAVIGATION_TIMEOUT_MS = 30 * 1000;
+const COLLECTOR_SETTLE_MS = 2500;
+const COLLECTOR_METRIC_WAIT_MS = 20 * 1000;
+const COLLECTOR_METRIC_POLL_MS = 2000;
 const COLLECTOR_PARTITION = "persist:tokenring-collector";
 const LOWER_PRIORITY_OVERRIDE_MS = 10 * 60 * 1000;
 const SOURCE_PRIORITY = {
@@ -26,6 +30,9 @@ let storePath;
 let logPath;
 const collectorWindows = new Map();
 const collectorTimers = new Map();
+const collectorRefreshes = new Map();
+const programmaticRefreshes = new Map();
+const userVisibleCollectors = new Set();
 let state = {
   updatedAt: null,
   providers: {}
@@ -134,6 +141,10 @@ function mergeUsage(payload) {
   if (previous) {
     const previousSource = previous.collectorSource || inferCollectorSource(previous.extractorVersion);
     record.metrics = mergeMetrics(previous.metrics, record.metrics, previousSource);
+    if (record.status === "no_metrics" && hasCoreMetrics(record.metrics)) {
+      record.status = "stale";
+      record.message = `No metrics found in latest pass; keeping previous ${record.metrics.filter(isCoreMetric).length}/2 core metric(s)`;
+    }
   }
   state.updatedAt = record.collectedAt;
   state.providers[record.provider] = record;
@@ -143,6 +154,14 @@ function mergeUsage(payload) {
     mainWindow.webContents.send("usage-updated", state);
   }
   return record;
+}
+
+function isCoreMetric(metric) {
+  return metric.kind === "5h" || metric.kind === "weekly";
+}
+
+function hasCoreMetrics(metrics = []) {
+  return metrics.some(isCoreMetric);
 }
 
 function appendCollectorLog(record, incomingPayload) {
@@ -379,8 +398,9 @@ function configureCollectorSession() {
 function startEmbeddedCollectors() {
   for (const provider of Object.keys(PROVIDER_URLS)) {
     ensureCollectorWindow(provider);
+    refreshAndCollectEmbeddedProvider(provider);
     const timer = setInterval(() => {
-      collectEmbeddedProvider(provider);
+      refreshAndCollectEmbeddedProvider(provider);
     }, COLLECTOR_INTERVAL_MS);
     collectorTimers.set(provider, timer);
   }
@@ -396,13 +416,15 @@ function ensureCollectorWindow(provider) {
     width: 1120,
     height: 820,
     show: false,
+    skipTaskbar: true,
     title: `TokenRing Collector - ${provider}`,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     webPreferences: {
       partition: COLLECTOR_PARTITION,
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: true,
+      backgroundThrottling: false
     }
   });
 
@@ -411,16 +433,17 @@ function ensureCollectorWindow(provider) {
   win.on("close", (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
+      userVisibleCollectors.delete(provider);
       win.hide();
     }
   });
 
   win.webContents.on("did-finish-load", () => {
-    setTimeout(() => collectEmbeddedProvider(provider), 1500);
+    scheduleEmbeddedCollect(provider);
   });
 
   win.webContents.on("did-navigate-in-page", () => {
-    setTimeout(() => collectEmbeddedProvider(provider), 1500);
+    scheduleEmbeddedCollect(provider);
   });
 
   win.loadURL(PROVIDER_URLS[provider]);
@@ -432,19 +455,143 @@ function openCollectorWindow(provider) {
   if (win.isMinimized()) {
     win.restore();
   }
+  userVisibleCollectors.add(provider);
+  win.center();
   win.show();
   win.focus();
-  if (win.webContents.getURL() !== PROVIDER_URLS[provider] && !win.webContents.getURL().startsWith(PROVIDER_URLS[provider].split("#")[0])) {
-    win.loadURL(PROVIDER_URLS[provider]);
-  }
+  refreshAndCollectEmbeddedProvider(provider);
 }
 
 async function collectAllEmbeddedProviders() {
-  const results = await Promise.allSettled(Object.keys(PROVIDER_URLS).map((provider) => collectEmbeddedProvider(provider)));
+  const results = await Promise.allSettled(Object.keys(PROVIDER_URLS).map((provider) => refreshAndCollectEmbeddedProvider(provider)));
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("usage-updated", state);
   }
   return results;
+}
+
+function refreshAndCollectEmbeddedProvider(provider) {
+  const existing = collectorRefreshes.get(provider);
+  if (existing) return existing;
+
+  const refresh = runRefreshAndCollectEmbeddedProvider(provider).finally(() => {
+    if (collectorRefreshes.get(provider) === refresh) {
+      collectorRefreshes.delete(provider);
+    }
+  });
+  collectorRefreshes.set(provider, refresh);
+  return refresh;
+}
+
+async function runRefreshAndCollectEmbeddedProvider(provider) {
+  const restoreVisibility = await makeCollectorWindowRenderable(provider);
+  try {
+    await refreshCollectorWindow(provider, { forceReload: true });
+    return await collectEmbeddedProviderWhenReady(provider);
+  } finally {
+    restoreVisibility();
+    programmaticRefreshes.delete(provider);
+  }
+}
+
+async function makeCollectorWindowRenderable(provider) {
+  const win = ensureCollectorWindow(provider);
+  if (userVisibleCollectors.has(provider) || win.isDestroyed()) {
+    return () => {};
+  }
+
+  const previousBounds = win.getBounds();
+  win.setBounds({
+    x: -32000,
+    y: -32000,
+    width: previousBounds.width,
+    height: previousBounds.height
+  });
+  win.showInactive();
+  await wait(250);
+
+  return () => {
+    if (win.isDestroyed() || userVisibleCollectors.has(provider)) return;
+    win.hide();
+    win.setBounds(previousBounds);
+  };
+}
+
+async function refreshCollectorWindow(provider, options = {}) {
+  const win = ensureCollectorWindow(provider);
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return;
+  }
+
+  const targetUrl = PROVIDER_URLS[provider];
+  const currentUrl = win.webContents.getURL();
+  const targetWithoutHash = targetUrl.split("#")[0];
+  const sameTarget = currentUrl === targetUrl || currentUrl.startsWith(targetWithoutHash);
+
+  if (!sameTarget) {
+    markProgrammaticRefresh(provider);
+    await loadCollectorUrl(win, targetUrl);
+  } else if (options.forceReload) {
+    markProgrammaticRefresh(provider);
+    await reloadCollectorUrl(win);
+  }
+
+  await wait(COLLECTOR_SETTLE_MS);
+}
+
+function markProgrammaticRefresh(provider) {
+  programmaticRefreshes.set(provider, Date.now() + COLLECTOR_NAVIGATION_TIMEOUT_MS + COLLECTOR_SETTLE_MS);
+}
+
+function scheduleEmbeddedCollect(provider) {
+  const ignoreUntil = programmaticRefreshes.get(provider);
+  if (ignoreUntil && Date.now() < ignoreUntil) {
+    return;
+  }
+  if (ignoreUntil) {
+    programmaticRefreshes.delete(provider);
+  }
+  setTimeout(() => collectEmbeddedProviderWhenReady(provider), 1500);
+}
+
+function loadCollectorUrl(win, url) {
+  return withNavigationTimeout(win.loadURL(url));
+}
+
+function reloadCollectorUrl(win) {
+  return withNavigationTimeout(new Promise((resolve, reject) => {
+    const cleanup = () => {
+      win.webContents.off("did-finish-load", handleDone);
+      win.webContents.off("did-fail-load", handleFail);
+    };
+    const handleDone = () => {
+      cleanup();
+      resolve();
+    };
+    const handleFail = (_event, errorCode, errorDescription) => {
+      cleanup();
+      reject(new Error(`Reload failed ${errorCode}: ${errorDescription}`));
+    };
+    win.webContents.once("did-finish-load", handleDone);
+    win.webContents.once("did-fail-load", handleFail);
+    win.webContents.reloadIgnoringCache();
+  }));
+}
+
+async function withNavigationTimeout(promise) {
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(resolve, COLLECTOR_NAVIGATION_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([promise.catch(() => undefined), timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function collectEmbeddedProvider(provider) {
@@ -466,4 +613,19 @@ async function collectEmbeddedProvider(provider) {
       extractorVersion: "embedded-0.1.0"
     });
   }
+}
+
+async function collectEmbeddedProviderWhenReady(provider) {
+  const startedAt = Date.now();
+  let lastRecord = null;
+
+  while (Date.now() - startedAt <= COLLECTOR_METRIC_WAIT_MS) {
+    lastRecord = await collectEmbeddedProvider(provider);
+    if (lastRecord && lastRecord.status === "ok" && hasCoreMetrics(lastRecord.metrics)) {
+      return lastRecord;
+    }
+    await wait(COLLECTOR_METRIC_POLL_MS);
+  }
+
+  return lastRecord;
 }

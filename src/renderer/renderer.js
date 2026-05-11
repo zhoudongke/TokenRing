@@ -115,10 +115,10 @@ function loginStateFor(provider, record) {
     };
   }
 
-  if ((record.status === "ok" || !record.status) && metrics.length) {
+  if (metrics.length && record.status !== "collector_error") {
     return {
       tone: "good",
-      text: "Collecting",
+      text: record.status === "stale" ? "Using last value" : "Collecting",
       detail: `${metrics.length}/2 core metrics`,
       page: source
     };

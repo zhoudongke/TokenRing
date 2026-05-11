@@ -4,6 +4,9 @@ function buildExtractionScript(provider) {
 
 function collectUsageInPage(provider) {
   const sourceUrl = window.location.href;
+  if (provider === "zai") {
+    activateZaiUsageTab();
+  }
   const pageText = normalizeText(document.body ? document.body.innerText || "" : "");
   const metrics = provider === "chatgpt_codex" ? extractChatGptCodexUsage(pageText) : extractGenericUsage(provider);
 
@@ -31,6 +34,23 @@ function collectUsageInPage(provider) {
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return "";
     return normalizeText(element.innerText || element.textContent || "");
+  }
+
+  function activateZaiUsageTab() {
+    const usageText = /^(usage|usages|用量|使用情况)$/i;
+    const elements = Array.from(document.querySelectorAll("button, a, [role='tab'], [role='button'], div, span"));
+
+    for (const element of elements) {
+      const text = normalizeText(element.innerText || element.textContent || "");
+      if (!usageText.test(text)) continue;
+
+      const clickable = element.closest("button, a, [role='tab'], [role='button']") || element;
+      const selected = clickable.getAttribute("aria-selected") === "true" || clickable.getAttribute("data-state") === "active";
+      if (!selected && typeof clickable.click === "function") {
+        clickable.click();
+      }
+      return;
+    }
   }
 
   function extractChatGptCodexUsage(text) {
