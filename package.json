@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node node_modules/electron/cli.js .",
     "check": "node scripts/check-project.js",
+    "screenshot": "node node_modules/electron/cli.js scripts/capture-readme-screenshot.js",
     "dist:win": "node node_modules/electron-builder/cli.js --win dir --x64 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-app.ps1",
     "dist:extension": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
     "dist": "npm run check && npm run dist:extension && npm run dist:win"
@@ -22,6 +23,7 @@
     },
     "files": [
       "src/**/*",
+      "assets/**/*",
       "package.json"
     ],
     "win": {

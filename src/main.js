@@ -160,15 +160,9 @@ function startServer() {
 }
 
 function createTrayIcon() {
-  const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <rect width="32" height="32" rx="7" fill="#101216"/>
-      <circle cx="16" cy="16" r="10" fill="none" stroke="#2d3138" stroke-width="5"/>
-      <path d="M16 6a10 10 0 1 1-8.66 15" fill="none" stroke="#32d583" stroke-width="5" stroke-linecap="round"/>
-      <circle cx="16" cy="16" r="3" fill="#f8fafc"/>
-    </svg>
-  `);
-  return nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${svg}`);
+  const iconPath = path.join(__dirname, "..", "assets", "icon.png");
+  const icon = nativeImage.createFromBuffer(fs.readFileSync(iconPath));
+  return icon.resize({ width: 16, height: 16 });
 }
 
 function showWindow() {
@@ -222,6 +216,7 @@ function createWindow() {
     alwaysOnTop: false,
     skipTaskbar: true,
     title: "TokenRing",
+    icon: path.join(__dirname, "..", "assets", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

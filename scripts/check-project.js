@@ -7,11 +7,14 @@ const requiredFiles = [
   "src/renderer/index.html",
   "src/renderer/styles.css",
   "src/renderer/renderer.js",
+  "assets/icon.png",
+  "docs/screenshot.png",
   "extension/manifest.json",
   "extension/background.js",
   "extension/content.js",
   "extension/popup.js",
-  "extension/popup.html"
+  "extension/popup.html",
+  "scripts/capture-readme-screenshot.js"
 ];
 
 const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(process.cwd(), file)));
