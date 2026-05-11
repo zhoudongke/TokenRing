@@ -254,6 +254,7 @@ async function postUsage(provider, metrics) {
       status: metrics.length ? "ok" : "no_metrics",
       message: metrics.length ? `Collected ${metrics.length} metric(s)` : "Usage page detected, but no percentage values matched",
       sourceUrl: window.location.href,
+      collectorSource: "extension",
       extractorVersion: EXTRACTOR_VERSION
     })
   });

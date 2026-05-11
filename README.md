@@ -81,6 +81,14 @@ If TokenRing shows that a page was seen but no metrics were found, the extension
 
 If a page remains `Never updated`, open the extension popup and click **Refresh open tabs now**. The popup reports whether it used the normal content script or the forced injection fallback for each open usage tab.
 
+Collection diagnostics are written to:
+
+```text
+%APPDATA%\token-ring\collector-log.jsonl
+```
+
+Each log line records the provider, collector source, source URL, incoming metrics, and final 5-hour / weekly values after priority merging. Embedded collectors have priority over the optional browser extension, so stale or incorrect extension results will not overwrite recent embedded values.
+
 Codex and Claude usually display remaining/used values differently, so TokenRing normalizes them:
 
 - ChatGPT Codex defaults to treating percentages as remaining.

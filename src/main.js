@@ -7,6 +7,12 @@ const { buildExtractionScript } = require("./collector-extractors");
 const PORT = 18765;
 const COLLECTOR_INTERVAL_MS = 60 * 1000;
 const COLLECTOR_PARTITION = "persist:tokenring-collector";
+const LOWER_PRIORITY_OVERRIDE_MS = 10 * 60 * 1000;
+const SOURCE_PRIORITY = {
+  embedded: 2,
+  extension: 1,
+  unknown: 0
+};
 const PROVIDER_URLS = {
   claude: "https://claude.ai/settings/usage",
   chatgpt_codex: "https://chatgpt.com/codex/cloud/settings/analytics#usage",
@@ -17,6 +23,7 @@ let tray;
 let mainWindow;
 let server;
 let storePath;
+let logPath;
 const collectorWindows = new Map();
 const collectorTimers = new Map();
 let state = {
@@ -45,6 +52,10 @@ function sanitizeUsagePayload(payload) {
   }
 
   const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  const extractorVersion = payload.extractorVersion ? String(payload.extractorVersion).slice(0, 40) : "unknown";
+  const collectorSource = payload.collectorSource
+    ? String(payload.collectorSource).slice(0, 40)
+    : inferCollectorSource(extractorVersion);
   const normalizedMetrics = metrics
     .map((metric) => {
       const remainingPct = Number(metric.remainingPct);
@@ -56,6 +67,7 @@ function sanitizeUsagePayload(payload) {
         usedPct: Number.isFinite(usedPct) ? Math.max(0, Math.min(100, usedPct)) : null,
         resetText: metric.resetText ? String(metric.resetText).slice(0, 200) : null,
         rawText: metric.rawText ? String(metric.rawText).slice(0, 500) : null,
+        collectorSource,
         observedAt: new Date().toISOString()
       };
     })
@@ -68,20 +80,49 @@ function sanitizeUsagePayload(payload) {
     message: payload.message ? String(payload.message).slice(0, 240) : null,
     sourceUrl: payload.sourceUrl ? String(payload.sourceUrl).slice(0, 500) : PROVIDER_URLS[provider],
     collectedAt: new Date().toISOString(),
-    extractorVersion: payload.extractorVersion ? String(payload.extractorVersion).slice(0, 40) : "unknown"
+    collectorSource,
+    extractorVersion
   };
 }
 
-function mergeMetrics(previousMetrics = [], nextMetrics = []) {
+function inferCollectorSource(extractorVersion) {
+  if (String(extractorVersion || "").startsWith("embedded")) return "embedded";
+  if (String(extractorVersion || "").includes("forced") || String(extractorVersion || "") !== "unknown") return "extension";
+  return "unknown";
+}
+
+function metricPriority(metric) {
+  return SOURCE_PRIORITY[metric?.collectorSource] ?? SOURCE_PRIORITY.unknown;
+}
+
+function metricAgeMs(metric) {
+  const time = Date.parse(metric?.observedAt || "");
+  if (!Number.isFinite(time)) return Number.POSITIVE_INFINITY;
+  return Date.now() - time;
+}
+
+function shouldReplaceMetric(previous, next) {
+  if (!previous) return true;
+  if (metricPriority(next) >= metricPriority(previous)) return true;
+  return metricAgeMs(previous) > LOWER_PRIORITY_OVERRIDE_MS;
+}
+
+function mergeMetrics(previousMetrics = [], nextMetrics = [], previousSource = "unknown") {
   const merged = new Map();
   for (const metric of previousMetrics) {
     if (metric && metric.kind) {
-      merged.set(metric.kind, metric);
+      merged.set(metric.kind, {
+        ...metric,
+        collectorSource: metric.collectorSource || previousSource
+      });
     }
   }
   for (const metric of nextMetrics) {
     if (metric && metric.kind) {
-      merged.set(metric.kind, metric);
+      const previous = merged.get(metric.kind);
+      if (shouldReplaceMetric(previous, metric)) {
+        merged.set(metric.kind, metric);
+      }
     }
   }
   return Array.from(merged.values());
@@ -91,15 +132,47 @@ function mergeUsage(payload) {
   const record = sanitizeUsagePayload(payload);
   const previous = state.providers[record.provider];
   if (previous) {
-    record.metrics = mergeMetrics(previous.metrics, record.metrics);
+    const previousSource = previous.collectorSource || inferCollectorSource(previous.extractorVersion);
+    record.metrics = mergeMetrics(previous.metrics, record.metrics, previousSource);
   }
   state.updatedAt = record.collectedAt;
   state.providers[record.provider] = record;
+  appendCollectorLog(record, payload);
   writeState();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("usage-updated", state);
   }
   return record;
+}
+
+function appendCollectorLog(record, incomingPayload) {
+  if (!logPath) return;
+  const logRecord = {
+    time: record.collectedAt,
+    provider: record.provider,
+    collectorSource: record.collectorSource,
+    status: record.status,
+    sourceUrl: record.sourceUrl,
+    incomingMetrics: (incomingPayload.metrics || []).map((metric) => ({
+      kind: metric.kind,
+      remainingPct: metric.remainingPct,
+      usedPct: metric.usedPct
+    })),
+    finalCoreMetrics: record.metrics
+      .filter((metric) => metric.kind === "5h" || metric.kind === "weekly")
+      .map((metric) => ({
+        kind: metric.kind,
+        remainingPct: metric.remainingPct,
+        usedPct: metric.usedPct,
+        collectorSource: metric.collectorSource,
+        observedAt: metric.observedAt
+      }))
+  };
+  try {
+    fs.appendFileSync(logPath, `${JSON.stringify(logRecord)}\n`, "utf8");
+  } catch {
+    // Logging must not interrupt quota collection.
+  }
 }
 
 function sendJson(res, statusCode, body) {
@@ -269,6 +342,7 @@ ipcMain.handle("window-action", async (_event, action) => {
 
 app.whenReady().then(() => {
   storePath = path.join(app.getPath("userData"), "usage-state.json");
+  logPath = path.join(app.getPath("userData"), "collector-log.jsonl");
   readState();
   configureCollectorSession();
   startServer();

@@ -15,6 +15,7 @@ function collectUsageInPage(provider) {
       ? `Embedded collector found ${metrics.length} metric(s)`
       : `Embedded collector saw the page, but found no usable percentages. Text length: ${pageText.length}`,
     sourceUrl,
+    collectorSource: "embedded",
     extractorVersion: "embedded-0.1.0"
   };
 

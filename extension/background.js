@@ -202,6 +202,7 @@ async function forcedCollectUsage(provider) {
       ? `Forced collector found ${metrics.length} metric(s)`
       : `Forced collector saw this page, but found no usable percentages. Text length: ${text.length}. Contains usage keyword: ${/usage|limit|remaining|quota|rate/i.test(lowerPage)}`,
     sourceUrl: location.href,
+    collectorSource: "extension",
     extractorVersion: "0.1.1-forced"
   };
 
