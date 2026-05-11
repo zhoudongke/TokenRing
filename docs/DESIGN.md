@@ -14,16 +14,25 @@ These subscription pages do not expose stable public quota APIs. TokenRing there
 
 ```text
 Official usage pages
-  -> Browser extension content script
+  -> Embedded Electron collector windows
+  -> Electron main process metric merge
+  -> Ring dashboard
+
+Optional browser extension path:
+
+Official usage pages in Chrome/Edge
+  -> Browser extension content script / forced injection
   -> POST http://127.0.0.1:18765/api/usage
-  -> Electron tray app
+  -> Electron tray app metric merge
   -> Local JSON snapshot
   -> Ring dashboard
 ```
 
 ## Security Boundary
 
-The extension is scoped to three exact usage pages and localhost. It does not:
+Embedded collectors store login state in Electron's persistent browser session and do not store passwords directly.
+
+The optional extension is scoped to three exact usage pages and localhost. It does not:
 
 - store account credentials
 - read cookies directly

@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const requiredFiles = [
   "src/main.js",
+  "src/collector-extractors.js",
   "src/preload.js",
   "src/renderer/index.html",
   "src/renderer/styles.css",
@@ -14,7 +15,8 @@ const requiredFiles = [
   "extension/content.js",
   "extension/popup.js",
   "extension/popup.html",
-  "scripts/capture-readme-screenshot.js"
+  "scripts/capture-readme-screenshot.js",
+  "scripts/test-embedded-collector.js"
 ];
 
 const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(process.cwd(), file)));

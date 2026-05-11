@@ -1,9 +1,12 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, session } = require("electron");
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { buildExtractionScript } = require("./collector-extractors");
 
 const PORT = 18765;
+const COLLECTOR_INTERVAL_MS = 60 * 1000;
+const COLLECTOR_PARTITION = "persist:tokenring-collector";
 const PROVIDER_URLS = {
   claude: "https://claude.ai/settings/usage",
   chatgpt_codex: "https://chatgpt.com/codex/cloud/settings/analytics#usage",
@@ -14,6 +17,8 @@ let tray;
 let mainWindow;
 let server;
 let storePath;
+const collectorWindows = new Map();
+const collectorTimers = new Map();
 let state = {
   updatedAt: null,
   providers: {}
@@ -194,9 +199,14 @@ function createTray() {
     { label: "Show TokenRing", click: showWindow },
     { label: "Hide TokenRing", click: () => mainWindow?.hide() },
     { type: "separator" },
-    { label: "Open Claude Usage", click: () => shell.openExternal(PROVIDER_URLS.claude) },
-    { label: "Open ChatGPT Codex Usage", click: () => shell.openExternal(PROVIDER_URLS.chatgpt_codex) },
-    { label: "Open Z.ai Subscription", click: () => shell.openExternal(PROVIDER_URLS.zai) },
+    { label: "Open Embedded Claude", click: () => openCollectorWindow("claude") },
+    { label: "Open Embedded ChatGPT Codex", click: () => openCollectorWindow("chatgpt_codex") },
+    { label: "Open Embedded Z.ai", click: () => openCollectorWindow("zai") },
+    { label: "Refresh Embedded Collectors", click: () => collectAllEmbeddedProviders() },
+    { type: "separator" },
+    { label: "Open Claude in Browser", click: () => shell.openExternal(PROVIDER_URLS.claude) },
+    { label: "Open ChatGPT Codex in Browser", click: () => shell.openExternal(PROVIDER_URLS.chatgpt_codex) },
+    { label: "Open Z.ai in Browser", click: () => shell.openExternal(PROVIDER_URLS.zai) },
     { type: "separator" },
     { label: "Quit", click: () => app.quit() }
   ]));
@@ -238,9 +248,8 @@ function createWindow() {
 }
 
 ipcMain.handle("open-provider", async (_event, provider) => {
-  const url = PROVIDER_URLS[provider];
-  if (!url) return false;
-  await shell.openExternal(url);
+  if (!PROVIDER_URLS[provider]) return false;
+  openCollectorWindow(provider);
   return true;
 });
 
@@ -256,13 +265,23 @@ ipcMain.handle("window-action", async (_event, action) => {
 app.whenReady().then(() => {
   storePath = path.join(app.getPath("userData"), "usage-state.json");
   readState();
+  configureCollectorSession();
   startServer();
   createTray();
   createWindow();
+  startEmbeddedCollectors();
 });
 
 app.on("before-quit", () => {
   app.isQuiting = true;
+  for (const timer of collectorTimers.values()) {
+    clearInterval(timer);
+  }
+  for (const win of collectorWindows.values()) {
+    if (!win.isDestroyed()) {
+      win.destroy();
+    }
+  }
   if (server) {
     server.close();
   }
@@ -271,3 +290,97 @@ app.on("before-quit", () => {
 app.on("window-all-closed", (event) => {
   event.preventDefault();
 });
+
+function configureCollectorSession() {
+  const collectorSession = session.fromPartition(COLLECTOR_PARTITION);
+  const userAgent = collectorSession.getUserAgent().replace(/\sElectron\/\S+/, "");
+  collectorSession.setUserAgent(userAgent);
+}
+
+function startEmbeddedCollectors() {
+  for (const provider of Object.keys(PROVIDER_URLS)) {
+    ensureCollectorWindow(provider);
+    const timer = setInterval(() => {
+      collectEmbeddedProvider(provider);
+    }, COLLECTOR_INTERVAL_MS);
+    collectorTimers.set(provider, timer);
+  }
+}
+
+function ensureCollectorWindow(provider) {
+  const existing = collectorWindows.get(provider);
+  if (existing && !existing.isDestroyed()) {
+    return existing;
+  }
+
+  const win = new BrowserWindow({
+    width: 1120,
+    height: 820,
+    show: false,
+    title: `TokenRing Collector - ${provider}`,
+    icon: path.join(__dirname, "..", "assets", "icon.png"),
+    webPreferences: {
+      partition: COLLECTOR_PARTITION,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  });
+
+  collectorWindows.set(provider, win);
+
+  win.on("close", (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+
+  win.webContents.on("did-finish-load", () => {
+    setTimeout(() => collectEmbeddedProvider(provider), 1500);
+  });
+
+  win.webContents.on("did-navigate-in-page", () => {
+    setTimeout(() => collectEmbeddedProvider(provider), 1500);
+  });
+
+  win.loadURL(PROVIDER_URLS[provider]);
+  return win;
+}
+
+function openCollectorWindow(provider) {
+  const win = ensureCollectorWindow(provider);
+  if (win.isMinimized()) {
+    win.restore();
+  }
+  win.show();
+  win.focus();
+  if (win.webContents.getURL() !== PROVIDER_URLS[provider] && !win.webContents.getURL().startsWith(PROVIDER_URLS[provider].split("#")[0])) {
+    win.loadURL(PROVIDER_URLS[provider]);
+  }
+}
+
+async function collectAllEmbeddedProviders() {
+  await Promise.allSettled(Object.keys(PROVIDER_URLS).map((provider) => collectEmbeddedProvider(provider)));
+}
+
+async function collectEmbeddedProvider(provider) {
+  const win = ensureCollectorWindow(provider);
+  if (win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.isLoading()) {
+    return null;
+  }
+
+  try {
+    const payload = await win.webContents.executeJavaScript(buildExtractionScript(provider), true);
+    return mergeUsage(payload);
+  } catch (error) {
+    return mergeUsage({
+      provider,
+      metrics: [],
+      status: "collector_error",
+      message: `Embedded collector error: ${error.message}`,
+      sourceUrl: win.webContents.getURL(),
+      extractorVersion: "embedded-0.1.0"
+    });
+  }
+}
