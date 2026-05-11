@@ -50,7 +50,8 @@ function sanitizeUsagePayload(payload) {
         remainingPct: Number.isFinite(remainingPct) ? Math.max(0, Math.min(100, remainingPct)) : null,
         usedPct: Number.isFinite(usedPct) ? Math.max(0, Math.min(100, usedPct)) : null,
         resetText: metric.resetText ? String(metric.resetText).slice(0, 200) : null,
-        rawText: metric.rawText ? String(metric.rawText).slice(0, 500) : null
+        rawText: metric.rawText ? String(metric.rawText).slice(0, 500) : null,
+        observedAt: new Date().toISOString()
       };
     })
     .filter((metric) => metric.remainingPct !== null || metric.usedPct !== null);
@@ -66,8 +67,27 @@ function sanitizeUsagePayload(payload) {
   };
 }
 
+function mergeMetrics(previousMetrics = [], nextMetrics = []) {
+  const merged = new Map();
+  for (const metric of previousMetrics) {
+    if (metric && metric.kind) {
+      merged.set(metric.kind, metric);
+    }
+  }
+  for (const metric of nextMetrics) {
+    if (metric && metric.kind) {
+      merged.set(metric.kind, metric);
+    }
+  }
+  return Array.from(merged.values());
+}
+
 function mergeUsage(payload) {
   const record = sanitizeUsagePayload(payload);
+  const previous = state.providers[record.provider];
+  if (previous) {
+    record.metrics = mergeMetrics(previous.metrics, record.metrics);
+  }
   state.updatedAt = record.collectedAt;
   state.providers[record.provider] = record;
   writeState();
@@ -155,8 +175,22 @@ function showWindow() {
   if (!mainWindow) {
     createWindow();
   }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
   mainWindow.show();
   mainWindow.focus();
+}
+
+function toggleWindow() {
+  if (!mainWindow) {
+    createWindow();
+  }
+  if (mainWindow.isVisible() && mainWindow.isFocused()) {
+    mainWindow.hide();
+    return;
+  }
+  showWindow();
 }
 
 function createTray() {
@@ -164,6 +198,7 @@ function createTray() {
   tray.setToolTip("TokenRing");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Show TokenRing", click: showWindow },
+    { label: "Hide TokenRing", click: () => mainWindow?.hide() },
     { type: "separator" },
     { label: "Open Claude Usage", click: () => shell.openExternal(PROVIDER_URLS.claude) },
     { label: "Open ChatGPT Codex Usage", click: () => shell.openExternal(PROVIDER_URLS.chatgpt_codex) },
@@ -171,7 +206,7 @@ function createTray() {
     { type: "separator" },
     { label: "Quit", click: () => app.quit() }
   ]));
-  tray.on("click", showWindow);
+  tray.on("click", toggleWindow);
 }
 
 function createWindow() {
@@ -183,8 +218,9 @@ function createWindow() {
     frame: false,
     resizable: true,
     transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: false,
+    show: false,
+    alwaysOnTop: false,
+    skipTaskbar: true,
     title: "TokenRing",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -194,6 +230,10 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  mainWindow.on("minimize", (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+  });
   mainWindow.on("close", (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
@@ -214,7 +254,7 @@ ipcMain.handle("get-state", async () => state);
 ipcMain.handle("window-action", async (_event, action) => {
   if (!mainWindow) return;
   if (action === "hide") mainWindow.hide();
-  if (action === "minimize") mainWindow.minimize();
+  if (action === "minimize") mainWindow.hide();
   if (action === "close") mainWindow.hide();
 });
 

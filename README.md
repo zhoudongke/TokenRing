@@ -24,7 +24,7 @@ npm install
 npm start
 ```
 
-The app opens a small always-on-top window and creates a tray icon. Closing the window hides it to the tray.
+The app starts hidden in the Windows tray. Click the TokenRing tray icon or use its tray menu to show the window. Closing or minimizing the window hides it back to the tray.
 
 ## Install the Browser Extension
 
